@@ -1,41 +1,14 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
-import { viteStaticCopy } from "vite-plugin-static-copy";
+import { defineConfig } from 'vite'
+import { resolve } from 'path'
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    viteStaticCopy({
-      targets: [
-        {
-          src: "stats.js", // Or wherever your stats.js is
-          dest: "", // '' means place it in root of dist/
-        },
-      ],
-    }),
-  ],
-  server: {
-    port: 3000,
-    host: true, // Listen on all addresses
-    open: true, // Auto-open browser
-  },
+base: '/spine-benchmark/',
   build: {
-    outDir: "dist",
-    sourcemap: true,
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+        batch: resolve(__dirname, 'src/batch.html'),
+      },
     },
   },
-  optimizeDeps: {
-    include: [
-      "@esotericsoftware/spine-pixi-v8",
-      "pixi.js",
-      "gsap",
-      "@paralleldrive/cuid2",
-    ],
-  },
-});
+})

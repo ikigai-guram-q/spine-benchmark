@@ -1,0 +1,149 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Spine Benchmark Batch</title>
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      pre { background: #111; color: #0f0; padding: 12px; overflow:auto; }
+      button { margin-left: 10px; }
+    </style>
+  </head>
+  <body>
+    <h2>Batch Spine Benchmark</h2>
+
+    <p>Select a root folder (it will process each subfolder):</p>
+    <input id="folder" type="file" webkitdirectory multiple />
+    <button id="download" disabled>Download results.json</button>
+
+    <h3>Log</h3>
+    <pre id="log"></pre>
+
+    <script type="module">
+      // IMPORTANT: adjust these imports to match the repo's actual export paths.
+      // If this import fails, see Step 4 below.
+        import { SpineLoader } from "./core/SpineLoader";
+        import { SpineAnalyzer } from "./core/SpineAnalyzer";
+
+
+      const logEl = document.getElementById("log");
+      const folderInput = document.getElementById("folder");
+      const downloadBtn = document.getElementById("download");
+
+      const log = (msg) => { logEl.textContent += msg + "\n"; };
+
+      let results = null;
+
+function groupByFirstVaryingFolder(files) {
+  const paths = files.map((f) =>
+    (f.webkitRelativePath || f.name).replace(/\\/g, "/")
+  );
+
+  // Convert each path into directory parts (exclude filename)
+  const dirPartsList = paths.map((p) => {
+    const parts = p.split("/").filter(Boolean);
+    parts.pop(); // remove filename
+    return parts;
+  });
+
+  // Find common prefix length among all directory parts
+  let commonLen = 0;
+  while (true) {
+    const part = dirPartsList[0]?.[commonLen];
+    if (!part) break;
+    if (dirPartsList.every((arr) => arr[commonLen] === part)) {
+      commonLen++;
+    } else {
+      break;
+    }
+  }
+
+  // Group by the first folder AFTER the common prefix
+  const groups = {};
+  for (let i = 0; i < files.length; i++) {
+    const dirs = dirPartsList[i];
+    const key = dirs[commonLen] || "root";
+    (groups[key] ??= []).push(files[i]);
+  }
+
+  return groups;
+}
+
+      function downloadJSON(obj, filename="results.json") {
+        const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      folderInput.addEventListener("change", async (e) => {
+        const files = [...e.target.files];
+        if (!files.length) return;
+
+        logEl.textContent = "";
+        log(`Selected ${files.length} files`);
+
+        const groups = groupByFirstVaryingFolder(files);
+        const groupNames = Object.keys(groups).sort();
+        log(`Found ${groupNames.length} subfolders: ${groupNames.join(", ")}`);
+
+        // The loader likely needs a PIXI app instance (depends on repo).
+        // Many repos have an Application somewhere. If SpineLoader requires it,
+        // we’ll create it here.
+        //
+        // If the repo already creates a PIXI app globally, you can reuse it instead.
+        let app = null;
+        try {
+          const pixi = await import("pixi.js");
+          app = new pixi.Application();
+          // We don't need to attach canvas for analysis-only,
+          // but some loaders expect textures; attaching can help.
+          document.body.appendChild(app.view);
+          app.view.style.width = "1px";
+          app.view.style.height = "1px";
+          app.view.style.opacity = "0";
+          app.view.style.position = "absolute";
+        } catch (err) {
+          log("Could not create PIXI Application automatically. If loader needs it, we must use the repo's app.");
+        }
+
+        const loader = new SpineLoader(app);
+
+        results = {};
+        for (const name of groupNames) {
+          const fileList = groups[name];
+          log(`\n[${name}] loading ${fileList.length} files...`);
+
+          try {
+            const spine = await loader.loadSpineFiles(fileList);
+            if (!spine) {
+              results[name] = { error: "Failed to load spine" };
+              log(`[${name}] ❌ failed to load`);
+              continue;
+            }
+
+            const analysis = SpineAnalyzer.analyze(spine);
+            const exported = SpineAnalyzer.exportJSON(analysis);
+
+            results[name] = exported;
+            log(`[${name}] ✅ analyzed`);
+          } catch (err) {
+            results[name] = { error: String(err) };
+            log(`[${name}] ❌ error: ${err}`);
+          }
+        }
+
+        downloadBtn.disabled = false;
+        log("\nDone. Click “Download results.json”.");
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        if (!results) return;
+        downloadJSON(results, "results.json");
+      });
+    </script>
+  </body>
+</html>
