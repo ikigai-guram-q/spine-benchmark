@@ -62,7 +62,7 @@ function groupByFirstVaryingFolder(files) {
   const groups = {};
   for (let i = 0; i < files.length; i++) {
     const dirs = dirPartsList[i];
-    const key = dirs[commonLen] || "root";
+    const key = dirs[commonLen];
     (groups[key] ??= []).push(files[i]);
   }
 
